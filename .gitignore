@@ -1,0 +1,9 @@
+/vehicles/
+/non_vehicles/
+/data/
+
+# jupyter notebook
+.ipynb_checkpoints
+/kernel-*.json
+
+*.pyc
