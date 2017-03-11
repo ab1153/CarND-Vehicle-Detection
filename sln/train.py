@@ -1,4 +1,7 @@
 from sln import *
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.svm import LinearSVC
 
 def get_hog_features(img, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True):
     if vis == True:
@@ -48,3 +51,22 @@ def extract_features(img, cspace='RGB', spatial_size=(32, 32),
     hist_features = color_hist(feature_image, nbins=hist_bins, bins_range=hist_range)
     # Append the new feature vector to the features list
     return np.concatenate((spatial_features, hist_features))
+
+def normalize(feat):
+    feat = feat.astype('float64')
+    feat = feat.reshape(-1, 1)
+    normalized_feat = StandardScaler().fit(feat).transform(feat)
+    return normalized_feat.ravel()
+
+def combine_feat(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    hog_feat = train.get_hog_features(gray, 9, 8, 2, False)
+    space_hist_feat = train.extract_features(img, cspace='HSV')
+    feat = np.concatenate([hog_feat, normalize(space_hist_feat)])
+    return feat
+
+def combine_feat(hog_feat, img):
+    space_hist_feat = train.extract_features(img, cspace='HSV')
+    feat = np.concatenate([hog_feat, normalize(space_hist_feat)])
+    return feat
+    
