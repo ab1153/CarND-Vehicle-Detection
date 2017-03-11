@@ -35,9 +35,7 @@ def find_cars(img, ystart, ystop, scale, svc, orient, pix_per_cell, cell_per_blo
             xleft = xpos*pix_per_cell
             ytop = ypos*pix_per_cell
             # Extract the image patch
-            subimg = cv2.resize(img_tosearch[ytop:ytop+window, xleft:xleft+window], (64,64))
-            test_features = train.combine_feat(hog_feat, subimg)
-            test_features = test_features.reshape(1,-1)
+            test_features = hog_feat.reshape(1,-1)
             test_prediction = svc.predict(test_features)
 
             if test_prediction == 1:
@@ -50,7 +48,7 @@ def find_cars(img, ystart, ystop, scale, svc, orient, pix_per_cell, cell_per_blo
     
 ystart = 400
 ystop = 656
-scale = 1.5
+scale = 1.6
 orient = 9
 pix_per_cell = 8
 cell_per_block = 2
