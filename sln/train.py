@@ -67,6 +67,6 @@ def combine_feat(img):
 
 def combine_feat(hog_feat, img):
     space_hist_feat = train.extract_features(img, cspace='HSV')
-    feat = np.concatenate([hog_feat, normalize(space_hist_feat)])
+    feat = np.concatenate([hog_feat, space_hist_feat])
     return feat
     
