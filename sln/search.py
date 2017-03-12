@@ -2,17 +2,17 @@ from sln import *
 from scipy.ndimage.measurements import label
 from collections import deque
 
-def find_cars(img, svc, ystart, ystop, orient, pix_per_cell, cell_per_block, scale):
-    # draw_img = np.copy(img)
+def find_cars(img, svc, scaler, ystart, ystop, orient, pix_per_cell, cell_per_block, scale):
     img_tosearch = img[ystart:ystop,:,:]
+
+    ctrans_tosearch = cv2.cvtColor(img_tosearch, cv2.COLOR_RGB2YCrCb)
     if scale != 1:
-        imshape = img_tosearch.shape
-        img_tosearch = cv2.resize(img_tosearch, (np.int(imshape[1]/scale), np.int(imshape[0]/scale)))
-    YCrCb = cv2.cvtColor(img_tosearch, cv2.COLOR_RGB2YCrCb)
-    
+        imshape = ctrans_tosearch.shape
+        ctrans_tosearch = cv2.resize(ctrans_tosearch, (np.int(imshape[1]/scale), np.int(imshape[0]/scale)))
+
     # Define blocks and steps as above
-    nxblocks = (img_tosearch.shape[1] // pix_per_cell)-1
-    nyblocks = (img_tosearch.shape[0] // pix_per_cell)-1 
+    nxblocks = (ctrans_tosearch.shape[1] // pix_per_cell)-1
+    nyblocks = (ctrans_tosearch.shape[0] // pix_per_cell)-1 
     nfeat_per_block = orient*cell_per_block**2
     # 64 was the orginal sampling rate, with 8 cells and 8 pix per cell
     window = 64
@@ -22,9 +22,10 @@ def find_cars(img, svc, ystart, ystop, orient, pix_per_cell, cell_per_block, sca
     nysteps = (nyblocks - nblocks_per_window) // cells_per_step
     
     # Compute individual channel HOG features for the entire image
-    hog1 = train.get_hog_features(YCrCb[...,0], orient, pix_per_cell, cell_per_block, feature_vec=False)
-    hog2 = train.get_hog_features(YCrCb[...,1], orient, pix_per_cell, cell_per_block, feature_vec=False)
-    hog3 = train.get_hog_features(YCrCb[...,2], orient, pix_per_cell, cell_per_block, feature_vec=False)
+    hog1 = train.get_hog_features(ctrans_tosearch[...,0], orient, pix_per_cell, cell_per_block, feature_vec=False)
+    hog2 = train.get_hog_features(ctrans_tosearch[...,1], orient, pix_per_cell, cell_per_block, feature_vec=False)
+    hog3 = train.get_hog_features(ctrans_tosearch[...,2], orient, pix_per_cell, cell_per_block, feature_vec=False)
+    # hog = train.get_hog_features(gray, orient, pix_per_cell, cell_per_block, feature_vec=False)
     
     boxes = []
 
@@ -36,19 +37,20 @@ def find_cars(img, svc, ystart, ystop, orient, pix_per_cell, cell_per_block, sca
             hog_feat1 = hog1[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel() 
             hog_feat2 = hog2[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel() 
             hog_feat3 = hog3[ypos:ypos+nblocks_per_window, xpos:xpos+nblocks_per_window].ravel()
-            hog_feat = np.concatenate([hog_feat1,hog_feat2,hog_feat3])
-            
+            hog_feat = np.hstack([hog_feat1,hog_feat2,hog_feat3])
+
             xleft = xpos*pix_per_cell
             ytop = ypos*pix_per_cell
-            # Extract the image patch
-            test_features = hog_feat.reshape(1,-1)
+
+            subimg = cv2.resize(ctrans_tosearch[ytop:ytop+window, xleft:xleft+window], (64,64))
+            combined_feat = train.combine_feat(hog_feat, subimg, 'LUV')
+            test_features = scaler.transform(combined_feat.reshape(1,-1))
             test_prediction = svc.predict(test_features)
 
             if test_prediction == 1:
                 xbox_left = np.int(xleft*scale)
                 ytop_draw = np.int(ytop*scale)
                 win_draw = np.int(window*scale)
-                # cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6) 
                 box = ((xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart))
                 boxes.append(box)
                 
@@ -95,7 +97,7 @@ def draw_labeled_bboxes(img, labels):
     # Return the image
     return img
 
-def draw_result(img, bboxes, threshold=1, output_heapmap=False):
+def draw_result(img, bboxes, threshold=1, output_heatmap=False):
     heat = np.zeros_like(img[:,:,0]).astype(np.float)    
     # Add heat to each box in box list
     heat = add_heat(heat,bboxes)
@@ -107,58 +109,45 @@ def draw_result(img, bboxes, threshold=1, output_heapmap=False):
     labels = label(heatmap)
     draw_img = draw_labeled_bboxes(np.copy(img), labels)
     
-    if output_heapmap:
+    if output_heatmap:
         return draw_img, heatmap
     else:
         return draw_img
 
-def find_cars_multiscale(img, svc, ystart, ystop, orient, pix_per_cell, cell_per_block, scales=[1.0, 1.5]):
+def find_cars_multiscale(img, svc, scaler, ystart, ystop, orient, pix_per_cell, cell_per_block, scales=[1.0, 1.5]):
     all_bboxes = []
+    used_scales = 0
     for scale in scales:
-        bboxes = find_cars(img, svc, ystart, ystop, orient, pix_per_cell, cell_per_block, scale)
+        bboxes = find_cars(img, svc, scaler, ystart, ystop, orient, pix_per_cell, cell_per_block, scale)
+        if len(bboxes) > 0:
+            used_scales += 1
         for bbox in bboxes:
             all_bboxes.append(bbox)    
     
-    return all_bboxes
-
-def process(img, svc):
-    ystart = 400
-    ystop = 656
-    orient = 9
-    pix_per_cell = 8
-    cell_per_block = 2
-    bboxes = find_cars_multiscale(img, svc, ystart, ystop, orient, pix_per_cell, cell_per_block)
-    out_img = draw_result(img, bboxes, threshold=5)
-    return out_img
+    return all_bboxes, used_scales
 
 class Tracker(object):
-    def __init__(self, svc):
+    def __init__(self, svc, scaler):
         self.svc = svc
+        self.scaler = scaler
         self.ystart = 400
         self.ystop = 656
         self.orient = 9
         self.pix_per_cell = 8
         self.cell_per_block = 2
-        self.last_bboxes = []
+        self.bboxes_list = [[],[],[]]
 
     def process(self, img):
         
-        new_bboxes = find_cars_multiscale(img, self.svc, 
-            self.ystart, self.ystop, self.orient, self.pix_per_cell, self.cell_per_block,
-            scales=[1.0])
+        new_bboxes, used_scales = find_cars_multiscale(img, self.svc, self.scaler, 
+            self.ystart, self.ystop, self.orient, self.pix_per_cell, self.cell_per_block, 
+            scales=[1.3, 1,6, 2, 2.5, 3, 5, 7])
 
-        bboxes = self.last_bboxes + new_bboxes
-        self.last_bboxes = new_bboxes
-        
-        size_classes = []
-        for bbox in bboxes:
-            # h = bbox[1][1] - box[0][1]
-            w = bbox[1][0] - bbox[0][0]
-            if w not in size_classes:
-                size_classes.append(w)
+        self.bboxes_list.append(new_bboxes)
+        self.bboxes_list.pop(0)
+        bboxes = [ bbox for bboxes in self.bboxes_list for bbox in bboxes ]
 
-        n_class = len(size_classes)
-            
-        out_img = draw_result(img, bboxes, n_class)
+        threshold = used_scales + 1
+        out_img = draw_result(img, bboxes, threshold)
 
         return out_img

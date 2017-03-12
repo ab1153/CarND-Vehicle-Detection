@@ -34,7 +34,6 @@ def color_hist(img, nbins=32, bins_range=(0, 256)):
 
 def extract_features(img, cspace='RGB', spatial_size=(32, 32),
                         hist_bins=32, hist_range=(0, 256)):
-
     if cspace != 'RGB':
         if cspace == 'HSV':
             feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
@@ -44,6 +43,8 @@ def extract_features(img, cspace='RGB', spatial_size=(32, 32),
             feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
         elif cspace == 'YUV':
             feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
+        elif cspace == 'YCrCb':
+            feature_image = cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
     else: feature_image = np.copy(image)      
     # Apply bin_spatial() to get spatial color features
     spatial_features = bin_spatial(feature_image, size=spatial_size)
@@ -52,21 +53,20 @@ def extract_features(img, cspace='RGB', spatial_size=(32, 32),
     # Append the new feature vector to the features list
     return np.concatenate((spatial_features, hist_features))
 
-def normalize(feat):
-    feat = feat.astype('float64')
-    feat = feat.reshape(-1, 1)
-    normalized_feat = StandardScaler().fit(feat).transform(feat)
-    return normalized_feat.ravel()
-
-def combine_feat(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    hog_feat = train.get_hog_features(gray, 9, 8, 2, False)
-    space_hist_feat = train.extract_features(img, cspace='HSV')
-    feat = np.concatenate([hog_feat, normalize(space_hist_feat)])
-    return feat
-
-def combine_feat(hog_feat, img):
-    space_hist_feat = train.extract_features(img, cspace='HSV')
+def combine_feat(hog_feat, img, cspace):
+    space_hist_feat = train.extract_features(img, cspace)
     feat = np.concatenate([hog_feat, space_hist_feat])
     return feat
-    
+
+def generate_feat(img, cspace):
+    # gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    # hog_feat = train.get_hog_features(gray, 9, 8, 2, False) 
+    YCrCb = cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
+    hog_feat1 = get_hog_features(YCrCb[...,0], 9, 8, 2, False)
+    hog_feat2 = get_hog_features(YCrCb[...,1], 9, 8, 2, False)
+    hog_feat3 = get_hog_features(YCrCb[...,2], 9, 8, 2, False) 
+    hog_feat = np.concatenate([hog_feat1,hog_feat2,hog_feat3])
+
+    feat = combine_feat(hog_feat, img, cspace)
+
+    return feat
